@@ -86,7 +86,7 @@ def get_hadith_text(data, language):
 def get_muslim_hadith(number):
     """
     Fawaz dataset: source records 1-92 are introductory.
-    User-facing Hadith 1 was tested against source record 93.
+    User-facing Hadith 1 maps to source record 93.
     """
 
     source_number = number + 92
@@ -144,24 +144,73 @@ async def send_long_message(message, text):
         await message.reply_text(chunk)
 
 
-# ---------------- START / HELP ----------------
+# ---------------- MAIN MENU ----------------
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "Assalamu Alaikum!\n\n"
-        "Welcome to Hadith & Quran Bot.\n\n"
-        "📚 Hadith Commands:\n"
-        "/books - View all Hadith collections\n"
-        "/hadith 9 - Get Hadith from selected collection\n"
-        "/hadith bukhari 9 - Get a specific Hadith\n"
-        "/hadith muslim 1 - Get Muslim Hadith\n\n"
-        "📖 Quran Commands:\n"
-        "/quran 2 255 - Get a specific Ayah\n"
-        "/surah 1 - Get a complete Surah\n\n"
-        "Languages: Arabic, English and Roman Hindi."
+def main_menu_keyboard():
+    return [
+        [
+            InlineKeyboardButton("📖 Quran", callback_data="menu_quran"),
+            InlineKeyboardButton("🌙 Surah", callback_data="menu_surah")
+        ],
+        [
+            InlineKeyboardButton(
+                "📗 Sahih al-Bukhari",
+                callback_data="book_bukhari"
+            ),
+            InlineKeyboardButton(
+                "📘 Sahih Muslim",
+                callback_data="book_muslim"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📙 Sunan Abu Dawud",
+                callback_data="book_abudawud"
+            ),
+            InlineKeyboardButton(
+                "📕 Jami at-Tirmidhi",
+                callback_data="book_tirmidhi"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📒 Sunan an-Nasa'i",
+                callback_data="book_nasai"
+            ),
+            InlineKeyboardButton(
+                "📔 Sunan Ibn Majah",
+                callback_data="book_ibnmajah"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "ℹ️ Help",
+                callback_data="menu_help"
+            )
+        ]
+    ]
+
+
+def main_menu_text():
+    return (
+        "Assalamu Alaikum! 🌙\n\n"
+        "Welcome to Quran & Authentic Hadith Bot 📖\n\n"
+        "Explore the Holy Quran and six Hadith collections "
+        "in one place.\n\n"
+        "✨ Available Languages:\n"
+        "• Arabic\n"
+        "• English\n"
+        "• Roman Hindi\n\n"
+        "May Allah increase us in beneficial knowledge. 🤲\n\n"
+        "👇 Select an option below:"
     )
 
-    await update.message.reply_text(text)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        main_menu_text(),
+        reply_markup=InlineKeyboardMarkup(main_menu_keyboard())
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,6 +230,13 @@ async def books_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         ])
 
+    keyboard.append([
+        InlineKeyboardButton(
+            "⬅️ Main Menu",
+            callback_data="menu_home"
+        )
+    ])
+
     await update.message.reply_text(
         "📚 Select a Hadith collection:",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -191,7 +247,7 @@ async def choose_book(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    book = query.data.replace("book_", "")
+    book = query.data.replace("book_", "", 1)
 
     if book not in BOOKS:
         await query.edit_message_text("Invalid collection.")
@@ -199,10 +255,95 @@ async def choose_book(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["selected_book"] = book
 
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "⬅️ Main Menu",
+                callback_data="menu_home"
+            )
+        ]
+    ]
+
     await query.edit_message_text(
-        f"Selected: {BOOKS[book]}\n\n"
+        f"📚 Selected: {BOOKS[book]}\n\n"
         "Now use:\n"
-        "/hadith 1"
+        "/hadith 1\n\n"
+        "Or directly use:\n"
+        f"/hadith {book} 1",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# ---------------- MENU CALLBACK ----------------
+
+async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    action = query.data
+
+    if action == "menu_quran":
+        text = (
+            "📖 QURAN AYAH\n\n"
+            "Get a Quran Ayah in three languages:\n"
+            "• Arabic\n"
+            "• English\n"
+            "• Roman Hindi\n\n"
+            "Use this command:\n"
+            "/quran 2 255\n\n"
+            "Example: /quran 1 1"
+        )
+
+    elif action == "menu_surah":
+        text = (
+            "🌙 COMPLETE SURAH\n\n"
+            "Read a complete Surah with:\n"
+            "• Arabic text\n"
+            "• English translation\n"
+            "• Roman Hindi translation\n\n"
+            "Use this command:\n"
+            "/surah 1\n\n"
+            "Example: /surah 2"
+        )
+
+    elif action == "menu_help":
+        text = (
+            "ℹ️ HOW TO USE THIS BOT\n\n"
+            "📚 HADITH:\n"
+            "Select a Hadith book from the main menu.\n"
+            "Then use /hadith 1\n\n"
+            "You can also use:\n"
+            "/hadith bukhari 9\n"
+            "/hadith muslim 1\n\n"
+            "📖 QURAN:\n"
+            "/quran 2 255\n\n"
+            "🌙 COMPLETE SURAH:\n"
+            "/surah 1\n\n"
+            "🌐 Languages: Arabic, English & Roman Hindi."
+        )
+
+    elif action == "menu_home":
+        await query.edit_message_text(
+            main_menu_text(),
+            reply_markup=InlineKeyboardMarkup(main_menu_keyboard())
+        )
+        return
+
+    else:
+        return
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "⬅️ Main Menu",
+                callback_data="menu_home"
+            )
+        ]
+    ]
+
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -449,7 +590,21 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
 
     app.add_handler(CommandHandler("books", books_command))
-    app.add_handler(CallbackQueryHandler(choose_book))
+
+    # Separate callback handlers for Hadith and menu buttons
+    app.add_handler(
+        CallbackQueryHandler(
+            choose_book,
+            pattern=r"^book_"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            menu_callback,
+            pattern=r"^menu_"
+        )
+    )
 
     app.add_handler(CommandHandler("hadith", hadith_command))
 

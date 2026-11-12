@@ -3,9 +3,6 @@ import os
 import asyncio
 import requests
 
-from indic_transliteration import sanscript
-from indic_transliteration.sanscript import transliterate
-
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -23,8 +20,18 @@ from telegram.ext import (
 TOKEN = os.getenv("BOT_TOKEN")
 
 HADITH_API = "https://ummahapi.com/api/hadith"
-FAWAZ_API = "https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions"
+
+FAWAZ_API = (
+    "https://cdn.jsdelivr.net/gh/fawazahmed0/"
+    "hadith-api@1/editions"
+)
+
 QURAN_API = "https://api.alquran.cloud/v1"
+
+ROMAN_HINDI_BASE = (
+    "https://cdn.jsdelivr.net/gh/fawazahmed0/"
+    "quran-api@1/editions/hin-maulanaazizulha-la"
+)
 
 BOOKS = {
     "bukhari": "Sahih al-Bukhari",
@@ -278,12 +285,18 @@ async def hadith_command(
 
 # ---------------- QURAN HELPERS ----------------
 
-def roman_hindi(text):
-    return transliterate(text, sanscript.DEVANAGARI, sanscript.ITRANS)
-
-
 async def get_quran_ayah(surah, ayah, edition):
     url = f"{QURAN_API}/ayah/{surah}:{ayah}/{edition}"
+    return await fetch_json(url)
+
+
+async def get_roman_ayah(surah, ayah):
+    url = f"{ROMAN_HINDI_BASE}/{surah}/{ayah}.json"
+    return await fetch_json(url)
+
+
+async def get_roman_surah(surah):
+    url = f"{ROMAN_HINDI_BASE}/{surah}.json"
     return await fetch_json(url)
 
 
@@ -306,17 +319,22 @@ async def quran_command(
         if not 1 <= surah <= 114 or ayah < 1:
             raise ValueError
 
-        arabic_data, english_data, hindi_data = await asyncio.gather(
+        arabic_data, english_data, roman_data = await asyncio.gather(
             get_quran_ayah(surah, ayah, "quran-uthmani"),
             get_quran_ayah(surah, ayah, "en.sahih"),
-            get_quran_ayah(surah, ayah, "hi.hindi")
+            get_roman_ayah(surah, ayah)
         )
 
         arabic = arabic_data["data"]["text"]
         english = english_data["data"]["text"]
-        hindi = hindi_data["data"]["text"]
 
-        roman = roman_hindi(hindi)
+        if (
+            roman_data["chapter"] != surah
+            or roman_data["verse"] != ayah
+        ):
+            raise ValueError("Roman Hindi Ayah mismatch")
+
+        roman = roman_data["text"]
 
         text = (
             f"📖 Quran - Surah {surah}, Ayah {ayah}\n\n"
@@ -355,26 +373,27 @@ async def surah_command(
         if not 1 <= surah <= 114:
             raise ValueError
 
-        arabic_data, english_data, hindi_data = await asyncio.gather(
+        arabic_data, english_data, roman_data = await asyncio.gather(
             fetch_json(
                 f"{QURAN_API}/surah/{surah}/quran-uthmani"
             ),
             fetch_json(
                 f"{QURAN_API}/surah/{surah}/en.sahih"
             ),
-            fetch_json(
-                f"{QURAN_API}/surah/{surah}/hi.hindi"
-            )
+            get_roman_surah(surah)
         )
 
         arabic_ayahs = arabic_data["data"]["ayahs"]
         english_ayahs = english_data["data"]["ayahs"]
-        hindi_ayahs = hindi_data["data"]["ayahs"]
+        roman_ayahs = roman_data["chapter"]
+
+        if not isinstance(roman_ayahs, list):
+            raise ValueError("Invalid Roman Hindi Surah response")
 
         if not (
             len(arabic_ayahs)
             == len(english_ayahs)
-            == len(hindi_ayahs)
+            == len(roman_ayahs)
         ):
             raise ValueError("Ayah count mismatch")
 
@@ -382,31 +401,26 @@ async def surah_command(
 
         text = f"📖 {surah_name}\nSurah {surah}\n\n"
 
-        for a, e, h in zip(
+        for a, e, r in zip(
             arabic_ayahs,
             english_ayahs,
-            hindi_ayahs
+            roman_ayahs
         ):
-            if (
-                a.get("numberInSurah")
-                != e.get("numberInSurah")
-                or a.get("numberInSurah")
-                != h.get("numberInSurah")
-            ):
-                raise ValueError("Ayah number mismatch")
-
             ayah_number = a["numberInSurah"]
 
-            arabic = a["text"]
-            english = e["text"]
-            hindi = roman_hindi(h["text"])
+            if (
+                ayah_number != e["numberInSurah"]
+                or ayah_number != r["verse"]
+                or r["chapter"] != surah
+            ):
+                raise ValueError("Ayah number mismatch")
 
             text += (
                 f"━━━━━━━━━━━━━━\n"
                 f"Ayah {ayah_number}\n\n"
-                f"{arabic}\n\n"
-                f"English:\n{english}\n\n"
-                f"Hindi (Roman):\n{hindi}\n\n"
+                f"{a['text']}\n\n"
+                f"English:\n{e['text']}\n\n"
+                f"Hindi (Roman):\n{r['text']}\n\n"
             )
 
         await send_long_message(update.message, text)
